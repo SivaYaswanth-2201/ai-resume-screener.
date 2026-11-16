@@ -21,7 +21,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
         padding: 24px 30px;
         border-radius: 12px;
         color: white;
@@ -90,6 +90,17 @@ st.markdown("""
         font-weight: 500;
         border: 1px solid #bfdbfe;
     }
+    .skill-pill-missing {
+        display: inline-block;
+        background-color: #fef2f2;
+        color: #dc2626;
+        padding: 4px 10px;
+        margin: 3px;
+        border-radius: 15px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        border: 1px solid #fecaca;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,11 +120,11 @@ def get_model():
         if os.path.exists(path):
             try:
                 model = joblib.load(path)
-                return model, f"Loaded from: {os.path.basename(path)}"
-            except Exception as e:
+                return model, "Loaded pre-trained Random Forest model"
+            except Exception:
                 pass
     
-    # Fallback: Train model on the exact training dataset defined in AIR_S.ipynb
+    # Fallback: Train model on the exact dataset defined in AIR_S.ipynb
     from sklearn.ensemble import RandomForestRegressor
     data = {
         'python_m': [1, 1, 0, 1, 1, 0, 1, 1],
@@ -137,17 +148,43 @@ def get_model():
 
 model, model_status = get_model()
 
+# Helper function to extract text from PDF
+def extract_text_from_pdf(uploaded_file):
+    try:
+        import pypdf
+        reader = pypdf.PdfReader(uploaded_file)
+        text = ""
+        for page in reader.pages:
+            t = page.extract_text()
+            if t:
+                text += t + "\n"
+        return text
+    except Exception as e:
+        st.error(f"Error reading PDF: {e}")
+        return ""
+
+# Helper function to compute decision
+def get_decision(score):
+    if score >= 80:
+        return "Strongly Recommended for Hire", "badge-hire", "Candidate possesses strong skill alignment and optimal relevant experience. Highly recommended for technical interview or offer."
+    elif score >= 65:
+        return "Shortlist for Technical Interview", "badge-shortlist", "Candidate meets key mandatory requirements. Conduct technical round to verify depth of knowledge."
+    elif score >= 50:
+        return "Under Review / Conditional", "badge-review", "Candidate has partial match. Consider for junior/entry-level positions or upskilling."
+    else:
+        return "Not Recommended / Upskilling Needed", "badge-reject", "Significant gaps in mandatory skills or required experience criteria."
+
 # ---------------------------------------------------------
 # Sidebar Navigation & Details
 # ---------------------------------------------------------
 with st.sidebar:
-    st.image("https://img.icons8.com/fluency/96/resume.png", width=75)
+    st.image("https://img.icons8.com/fluency/96/resume.png", width=70)
     st.title("Navigation")
     app_mode = st.radio(
         "Choose Module:",
         [
-            "🎯 Single Candidate Screener",
-            "📄 Resume Text/File Screening",
+            "📄 Resume Upload & NLP Screening",
+            "🎯 Manual Profile & Skill Screener",
             "👥 Batch Candidate Ranking",
             "📊 Model Analytics & Viva Guide"
         ]
@@ -165,7 +202,7 @@ with st.sidebar:
     **Institution:** Audisankara Institute of Technology  
     **Guide:** Dr. A.M. Mahaboob Basha  
     """)
-    st.caption(f"Status: {model_status}")
+    st.caption(f"Engine: {model_status}")
 
 # ---------------------------------------------------------
 # Header Section
@@ -177,30 +214,157 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Helper function to compute decision
-def get_decision(score):
-    if score >= 80:
-        return "Strongly Recommended for Hire", "badge-hire", "Candidate possesses top-tier skill alignment and optimal relevant experience. Fast-track for offer."
-    elif score >= 65:
-        return "Shortlist for Technical Interview", "badge-shortlist", "Candidate meets key mandatory requirements. Conduct technical round to verify depth."
-    elif score >= 50:
-        return "Under Review / Conditional", "badge-review", "Candidate has partial match. Consider for junior positions or conditional hiring."
+# ---------------------------------------------------------
+# MODULE 1: Resume Upload & NLP Screening (Clean, No Hardcoded Defaults)
+# ---------------------------------------------------------
+if app_mode == "📄 Resume Upload & NLP Screening":
+    st.subheader("Automated Resume Screening (PDF / TXT)")
+    st.write("Upload a candidate resume or paste resume text. The NLP engine parses core technical competencies and experience, then predicts the suitability score.")
+
+    method = st.radio("Choose Input Method:", ["📁 Upload Resume File (PDF or TXT)", "📝 Paste Resume Text"], horizontal=True)
+
+    resume_text = ""
+    candidate_name = ""
+
+    if method == "📁 Upload Resume File (PDF or TXT)":
+        uploaded_file = st.file_uploader("Upload Resume (.pdf or .txt)", type=["pdf", "txt"], help="Upload any standard resume PDF or text file")
+        if uploaded_file is not None:
+            if uploaded_file.name.lower().endswith(".pdf"):
+                with st.spinner("Parsing PDF text..."):
+                    resume_text = extract_text_from_pdf(uploaded_file)
+            else:
+                resume_text = uploaded_file.read().decode("utf-8", errors="ignore")
+            
+            if resume_text.strip():
+                st.success(f"✅ Successfully read resume: **{uploaded_file.name}** ({len(resume_text)} characters extracted)")
+                with st.expander("👁️ View Extracted Resume Content"):
+                    st.text(resume_text[:2000] + ("..." if len(resume_text) > 2000 else ""))
+            else:
+                st.warning("Could not extract readable text from the file. Please paste the resume text directly.")
     else:
-        return "Not Recommended / Upskilling Needed", "badge-reject", "Significant gap in mandatory skills or minimum experience criteria."
+        col_txt, col_demo = st.columns([3, 1])
+        with col_demo:
+            st.write("")
+            st.write("")
+            load_sample = st.button("📋 Load Sample for Demo")
+        
+        default_val = ""
+        if load_sample:
+            default_val = """JALLA SIVA YASWANTH
+Email: yaswanthjalla5@gmail.com | Phone: +91 8886355283
+Education: B.Tech in Computer Science and Engineering, Audisankara Institute of Technology
+Skills: Python, Django, REST APIs, SQL, MySQL, AWS Cloud, HTML, CSS, JavaScript, React.js
+Experience: 3 years of hands-on experience in full-stack Python development and ML projects.
+Projects: AI Resume Screening & Candidate Hiring Predictor using Machine Learning."""
+        
+        with col_txt:
+            resume_text = st.text_area("Resume Content:", value=default_val, height=220, placeholder="Paste candidate resume text here (skills, work history, experience)...")
+
+    st.markdown("---")
+    
+    col_btn, _ = st.columns([1, 2])
+    with col_btn:
+        screen_btn = st.button("🚀 Screen Resume & Predict Score", type="primary", use_container_width=True)
+
+    if screen_btn:
+        if not resume_text.strip():
+            st.warning("⚠️ Please upload a resume file or paste resume text first.")
+        else:
+            text_lower = resume_text.lower()
+
+            # NLP Extraction for core model features
+            has_python = 1 if re.search(r'\bpython\b', text_lower) else 0
+            has_django = 1 if re.search(r'\bdjango\b', text_lower) else 0
+            has_sql = 1 if re.search(r'\b(sql|mysql|postgresql|sqlite|database)\b', text_lower) else 0
+            has_aws = 1 if re.search(r'\b(aws|amazon web services|cloud|ec2|s3)\b', text_lower) else 0
+
+            # Experience extraction via regex pattern matching
+            exp_patterns = [
+                r'(\d+)\+?\s*(?:years?|yrs?)(?:\s+of)?\s+experience',
+                r'experience\s*:\s*(\d+)\+?\s*(?:years?|yrs?)',
+                r'(\d+)\+?\s*(?:years?|yrs?)\s+in'
+            ]
+            extracted_exp = None
+            for pat in exp_patterns:
+                m = re.search(pat, text_lower)
+                if m:
+                    extracted_exp = int(m.group(1))
+                    break
+            
+            if extracted_exp is None:
+                # If no explicit years mentioned, check for intern / fresher keywords
+                if "intern" in text_lower or "fresher" in text_lower or "student" in text_lower:
+                    extracted_exp = 1
+                else:
+                    extracted_exp = 2
+
+            # Try to extract candidate name (typically first line of resume)
+            lines = [line.strip() for line in resume_text.splitlines() if line.strip()]
+            cand_name_display = lines[0] if lines else "Candidate"
+            if len(cand_name_display) > 40:
+                cand_name_display = "Candidate"
+
+            # Predict using model
+            df_in = pd.DataFrame([{
+                'python_m': has_python,
+                'django_m': has_django,
+                'sql_m': has_sql,
+                'aws_o': has_aws,
+                'rel_exp': extracted_exp,
+                'gender_enc': 1
+            }])
+
+            raw_score = model.predict(df_in)[0]
+            score = float(np.clip(raw_score, 10.0, 99.5))
+            verdict, badge_class, explanation = get_decision(score)
+
+            st.markdown(f"### 📋 Evaluation Result for: **{cand_name_display}**")
+
+            # Metric Cards
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Predicted Suitability", f"{score:.1f}%")
+            c2.metric("Mandatory Skills Found", f"{sum([has_python, has_django, has_sql])}/3")
+            c3.metric("AWS Cloud (Optional)", "Found ✅" if has_aws else "Not Found")
+            c4.metric("Experience Detected", f"{extracted_exp} Years")
+
+            st.markdown(f"""
+            <div class="metric-card" style="margin:18px 0; text-align:left;">
+                <span class="{badge_class}" style="font-size:1.05rem;">Verdict: {verdict}</span>
+                <p style="color:#374151; margin-top:10px; font-size:1rem;">{explanation}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.progress(score / 100)
+
+            # Skill Tags Breakdown
+            st.markdown("#### Detected Competencies:")
+            pill_html = ""
+            pill_html += '<span class="skill-pill">✅ Python</span>' if has_python else '<span class="skill-pill-missing">❌ Python Missing</span>'
+            pill_html += '<span class="skill-pill">✅ Django</span>' if has_django else '<span class="skill-pill-missing">❌ Django Missing</span>'
+            pill_html += '<span class="skill-pill">✅ SQL</span>' if has_sql else '<span class="skill-pill-missing">❌ SQL Missing</span>'
+            pill_html += '<span class="skill-pill">✨ AWS Cloud</span>' if has_aws else '<span class="skill-pill" style="opacity:0.6;">☁️ AWS (Not Found)</span>'
+            
+            # Check secondary skills
+            secondary = ["react", "javascript", "html", "css", "rest api", "git", "docker", "machine learning"]
+            for s in secondary:
+                if re.search(r'\b' + re.escape(s) + r'\b', text_lower):
+                    pill_html += f'<span class="skill-pill">🌟 {s.title()}</span>'
+
+            st.markdown(pill_html, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# MODULE 1: Single Candidate Screener
+# MODULE 2: Manual Profile & Skill Screener (Clean Input)
 # ---------------------------------------------------------
-if app_mode == "🎯 Single Candidate Screener":
-    st.subheader("Candidate Profile & Skill Evaluation")
-    st.write("Enter candidate credentials and skill proficiencies to compute the AI Suitability Score.")
+elif app_mode == "🎯 Manual Profile & Skill Screener":
+    st.subheader("Manual Candidate Evaluation Form")
+    st.write("Customize candidate parameters and skills directly to calculate the AI suitability score.")
 
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.markdown("#### 1. Candidate Bio")
-        cand_name = st.text_input("Candidate Full Name", value="Alex Morgan")
-        cand_email = st.text_input("Email Address", value="alex.morgan@example.com")
+        st.markdown("#### 1. Candidate Details")
+        cand_name = st.text_input("Candidate Full Name", placeholder="e.g. Jalla Siva Yaswanth")
+        cand_email = st.text_input("Email Address", placeholder="e.g. candidate@example.com")
         cand_role = st.selectbox(
             "Target Role",
             ["Python Full Stack Developer", "Data Scientist / ML Engineer", "Backend Software Engineer", "Cloud & DevOps Engineer"]
@@ -209,11 +373,11 @@ if app_mode == "🎯 Single Candidate Screener":
         gender_enc = 1 if gender == "Male" else 0
 
         st.markdown("#### 2. Work Experience")
-        rel_exp = st.slider("Years of Relevant Experience", min_value=0, max_value=15, value=4, step=1)
+        rel_exp = st.slider("Years of Relevant Experience", min_value=0, max_value=15, value=3, step=1)
 
     with col2:
-        st.markdown("#### 3. Core Technical Skills")
-        st.caption("Skills defined in model specification:")
+        st.markdown("#### 3. Core Required Skills")
+        st.caption("Select skills possessed by candidate:")
         
         col_m1, col_m2 = st.columns(2)
         with col_m1:
@@ -223,7 +387,7 @@ if app_mode == "🎯 Single Candidate Screener":
             sql_m = st.checkbox("🗄️ SQL Database (Mandatory)", value=True)
             aws_o = st.checkbox("☁️ AWS Cloud (Optional Bonus)", value=False)
             
-        st.markdown("#### 4. Additional Soft & Tech Skills (Optional)")
+        st.markdown("#### 4. Additional Soft & Tech Skills")
         add_skills = st.multiselect(
             "Extra competencies found:",
             ["Git / GitHub", "Docker / Containers", "REST APIs", "React.js", "CI/CD", "Agile / Scrum", "Communication"],
@@ -231,9 +395,10 @@ if app_mode == "🎯 Single Candidate Screener":
         )
 
     st.markdown("---")
-    predict_btn = st.button("🚀 Evaluate Candidate & Predict Hiring Score", type="primary", use_container_width=True)
+    predict_btn = st.button("🚀 Calculate Suitability Score", type="primary", use_container_width=True)
 
     if predict_btn:
+        name_display = cand_name if cand_name.strip() else "Candidate"
         input_data = pd.DataFrame([{
             'python_m': 1 if python_m else 0,
             'django_m': 1 if django_m else 0,
@@ -244,11 +409,10 @@ if app_mode == "🎯 Single Candidate Screener":
         }])
 
         raw_pred = model.predict(input_data)[0]
-        # Normalize score between 10 and 99
         score = float(np.clip(raw_pred, 10.0, 99.5))
         verdict, badge_class, explanation = get_decision(score)
 
-        st.markdown("### 📊 Evaluation Results")
+        st.markdown(f"### 📊 Evaluation Results: **{name_display}**")
         
         res_col1, res_col2, res_col3 = st.columns([1, 1, 1.2])
 
@@ -264,7 +428,7 @@ if app_mode == "🎯 Single Candidate Screener":
         with res_col2:
             st.markdown(f"""
             <div class="metric-card">
-                <p style="color:#6b7280; margin-bottom:5px;">MANDATORY SKILLS MATCH</p>
+                <p style="color:#6b7280; margin-bottom:5px;">MANDATORY SKILLS</p>
                 <h1 style="color:#10b981; font-size:3rem; margin:0;">{sum([python_m, django_m, sql_m])}/3</h1>
                 <p style="color:#4b5563; margin-top:5px; font-weight:500;">Experience: {rel_exp} Year(s)</p>
             </div>
@@ -273,130 +437,36 @@ if app_mode == "🎯 Single Candidate Screener":
         with res_col3:
             st.markdown(f"""
             <div class="metric-card" style="text-align:left;">
-                <p style="color:#6b7280; font-weight:600; margin-bottom:5px;">AI RECRUITER VERDICT</p>
+                <p style="color:#6b7280; font-weight:600; margin-bottom:5px;">RECRUITER SUMMARY</p>
                 <p style="font-size:0.95rem; color:#374151;">{explanation}</p>
-                <p style="font-size:0.85rem; color:#6b7280;">Target: <b>{cand_role}</b></p>
+                <p style="font-size:0.85rem; color:#6b7280;">Target Role: <b>{cand_role}</b></p>
             </div>
             """, unsafe_allow_html=True)
 
         st.progress(score / 100)
-
-        # Skill Breakdown Badges
-        st.markdown("#### Matched Profile Attributes:")
-        skills_html = ""
-        if python_m: skills_html += '<span class="skill-pill">✅ Python</span>'
-        else: skills_html += '<span class="skill-pill" style="background:#fee2e2; color:#b91c1c; border-color:#fca5a5;">❌ Missing Python</span>'
-        
-        if django_m: skills_html += '<span class="skill-pill">✅ Django</span>'
-        else: skills_html += '<span class="skill-pill" style="background:#fee2e2; color:#b91c1c; border-color:#fca5a5;">❌ Missing Django</span>'
-        
-        if sql_m: skills_html += '<span class="skill-pill">✅ SQL</span>'
-        else: skills_html += '<span class="skill-pill" style="background:#fee2e2; color:#b91c1c; border-color:#fca5a5;">❌ Missing SQL</span>'
-        
-        if aws_o: skills_html += '<span class="skill-pill">✨ AWS Cloud (Bonus)</span>'
-        
-        for sk in add_skills:
-            skills_html += f'<span class="skill-pill">🌟 {sk}</span>'
-            
-        st.markdown(skills_html, unsafe_allow_html=True)
-
-# ---------------------------------------------------------
-# MODULE 2: Automated Resume Text / File Screening (NLP)
-# ---------------------------------------------------------
-elif app_mode == "📄 Resume Text/File Screening":
-    st.subheader("NLP-Based Resume Parser & Screener")
-    st.write("Upload or paste resume text. The NLP parser scans for core skills and years of experience, then automatically feeds them into the Machine Learning model.")
-
-    tab_text, tab_file = st.tabs(["📝 Paste Resume Text", "📁 Upload Resume File (.txt)"])
-
-    resume_text = ""
-    with tab_text:
-        sample_resume = """
-John Doe - Senior Software Engineer
-Email: john.doe@email.com | Phone: +91 9876543210
-Summary:
-Passionate Software Engineer with 5 years of experience in backend development.
-Strong background in Python, Django REST Framework, and SQL databases (PostgreSQL/MySQL).
-Experience with AWS cloud infrastructure (EC2, S3), Docker, and Git version control.
-Education: B.Tech in Computer Science and Engineering.
-        """
-        resume_text = st.text_area("Resume Content:", value=sample_resume, height=220)
-
-    with tab_file:
-        uploaded_file = st.file_uploader("Upload resume text file", type=["txt"])
-        if uploaded_file is not None:
-            resume_text = uploaded_file.read().decode("utf-8", errors="ignore")
-            st.success("File uploaded successfully!")
-
-    if st.button("🔍 Parse Resume with NLP & Screen Candidate", type="primary"):
-        if not resume_text.strip():
-            st.warning("Please provide resume text to analyze.")
-        else:
-            text_lower = resume_text.lower()
-
-            # NLP Keyword Extraction
-            has_python = 1 if re.search(r'\bpython\b', text_lower) else 0
-            has_django = 1 if re.search(r'\bdjango\b', text_lower) else 0
-            has_sql = 1 if re.search(r'\b(sql|mysql|postgresql|sqlite|database)\b', text_lower) else 0
-            has_aws = 1 if re.search(r'\b(aws|amazon web services|cloud|ec2|s3)\b', text_lower) else 0
-
-            # Experience Extraction via Regular Expression
-            exp_match = re.search(r'(\d+)\+?\s*(?:years?|yrs?)(?:\s+of)?\s+experience', text_lower)
-            if exp_match:
-                extracted_exp = int(exp_match.group(1))
-            else:
-                extracted_exp = 3 # sensible default if not explicitly stated
-
-            # Predict
-            df_in = pd.DataFrame([{
-                'python_m': has_python,
-                'django_m': has_django,
-                'sql_m': has_sql,
-                'aws_o': has_aws,
-                'rel_exp': extracted_exp,
-                'gender_enc': 1
-            }])
-
-            score = float(np.clip(model.predict(df_in)[0], 10.0, 99.5))
-            verdict, badge_class, explanation = get_decision(score)
-
-            st.markdown("### 📋 Automated NLP Extraction & Match Result")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Python Detected", "Yes ✅" if has_python else "No ❌")
-            c2.metric("Django Detected", "Yes ✅" if has_django else "No ❌")
-            c3.metric("SQL Detected", "Yes ✅" if has_sql else "No ❌")
-            c4.metric("Experience Extracted", f"{extracted_exp} Years")
-
-            st.markdown(f"""
-            <div class="metric-card" style="margin-top:20px; text-align:left;">
-                <span class="{badge_class}" style="font-size:1.1rem;">Verdict: {verdict}</span>
-                <h2 style="color:#1e3a8a; margin:10px 0;">Overall Suitability Score: {score:.1f}%</h2>
-                <p style="color:#4b5563;">{explanation}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            st.progress(score / 100)
 
 # ---------------------------------------------------------
 # MODULE 3: Batch Candidate Ranking
 # ---------------------------------------------------------
 elif app_mode == "👥 Batch Candidate Ranking":
     st.subheader("Batch Resume Screening & Leaderboard")
-    st.write("Evaluate multiple candidate profiles at once and automatically sort them from highest to lowest suitability.")
+    st.write("Screen multiple candidate profiles simultaneously and rank them by suitability.")
 
     candidates_sample = [
-        {"Name": "Aarav Sharma", "Python": 1, "Django": 1, "SQL": 1, "AWS": 1, "Exp (Yrs)": 6, "Gender": "Male"},
-        {"Name": "Sneha Reddy", "Python": 1, "Django": 1, "SQL": 1, "AWS": 0, "Exp (Yrs)": 4, "Gender": "Female"},
-        {"Name": "Kiran Kumar", "Python": 1, "Django": 0, "SQL": 1, "AWS": 1, "Exp (Yrs)": 3, "Gender": "Male"},
-        {"Name": "Pooja Patel", "Python": 1, "Django": 1, "SQL": 0, "AWS": 0, "Exp (Yrs)": 2, "Gender": "Female"},
-        {"Name": "Vikram Singh", "Python": 0, "Django": 0, "SQL": 1, "AWS": 0, "Exp (Yrs)": 1, "Gender": "Male"},
-        {"Name": "Ananya Joshi", "Python": 1, "Django": 1, "SQL": 1, "AWS": 1, "Exp (Yrs)": 7, "Gender": "Female"}
+        {"Name": "Jalla Siva Yaswanth", "Python": 1, "Django": 1, "SQL": 1, "AWS": 1, "Exp (Yrs)": 3, "Gender": "Male"},
+        {"Name": "Candidate A", "Python": 1, "Django": 1, "SQL": 1, "AWS": 0, "Exp (Yrs)": 4, "Gender": "Female"},
+        {"Name": "Candidate B", "Python": 1, "Django": 0, "SQL": 1, "AWS": 1, "Exp (Yrs)": 2, "Gender": "Male"},
+        {"Name": "Candidate C", "Python": 1, "Django": 1, "SQL": 0, "AWS": 0, "Exp (Yrs)": 2, "Gender": "Female"},
+        {"Name": "Candidate D", "Python": 0, "Django": 0, "SQL": 1, "AWS": 0, "Exp (Yrs)": 1, "Gender": "Male"},
+        {"Name": "Candidate E", "Python": 1, "Django": 1, "SQL": 1, "AWS": 1, "Exp (Yrs)": 6, "Gender": "Male"}
     ]
 
     batch_df = pd.DataFrame(candidates_sample)
     
+    st.markdown("#### Candidate Pool:")
     st.dataframe(batch_df, use_container_width=True)
 
-    if st.button("⚡ Run Batch AI Ranking", type="primary"):
+    if st.button("⚡ Run AI Batch Ranking", type="primary"):
         scores = []
         decisions = []
         for _, row in batch_df.iterrows():
@@ -415,14 +485,13 @@ elif app_mode == "👥 Batch Candidate Ranking":
             decisions.append(dec)
 
         batch_df["AI Score (%)"] = scores
-        batch_df["Hiring Recommendation"] = decisions
+        batch_df["Recommendation"] = decisions
         batch_df = batch_df.sort_values(by="AI Score (%)", ascending=False).reset_index(drop=True)
         batch_df.index = batch_df.index + 1
 
-        st.markdown("### 🏆 Candidate Ranking Leaderboard")
+        st.markdown("### 🏆 Ranked Candidate Leaderboard")
         st.dataframe(batch_df, use_container_width=True)
         
-        # Download Shortlist Button
         csv = batch_df.to_csv(index=True).encode('utf-8')
         st.download_button(
             "📥 Download Shortlisted Candidates (CSV)",
@@ -435,46 +504,43 @@ elif app_mode == "👥 Batch Candidate Ranking":
 # MODULE 4: Model Analytics & College Viva Guide
 # ---------------------------------------------------------
 elif app_mode == "📊 Model Analytics & Viva Guide":
-    st.subheader("Machine Learning Model Insights & College Viva Guide")
+    st.subheader("Machine Learning Insights & Viva Preparation Guide")
 
     st.markdown("""
     ### 🧠 Model Architecture & Methodology
-    The prediction engine uses **Random Forest Regression** (`sklearn.ensemble.RandomForestRegressor`), an ensemble meta-estimator that fits multiple decision trees on various sub-samples of the dataset and uses averaging to improve predictive accuracy and control over-fitting.
+    The engine uses **Random Forest Regression** (`sklearn.ensemble.RandomForestRegressor`), an ensemble algorithm combining 100 decision trees trained with bootstrap aggregating (bagging) and random feature selection.
     """)
 
     col_info1, col_info2, col_info3 = st.columns(3)
     col_info1.metric("Algorithm", "Random Forest Regressor")
-    col_info2.metric("Number of Estimators", "100 Trees")
-    col_info3.metric("Random State Seed", "42 (Deterministic)")
+    col_info2.metric("Estimators (Trees)", "100")
+    col_info3.metric("Random State", "42 (Deterministic)")
 
-    # Feature Importance (Standard random forest weights)
     st.markdown("#### Relative Feature Importance:")
-    feat_names = ["Relevant Experience", "Python Skill", "Django Framework", "SQL Database", "AWS Cloud", "Gender Encoding"]
+    feat_names = ["Relevant Experience", "Python Skill", "Django Framework", "SQL Database", "AWS Cloud", "Gender"]
     importances = [0.42, 0.22, 0.16, 0.12, 0.07, 0.01]
     chart_df = pd.DataFrame({"Feature": feat_names, "Importance Weight": importances})
     st.bar_chart(chart_df.set_index("Feature"))
 
     st.markdown("---")
-    st.markdown("### 🎓 Frequently Asked Questions for Project Viva / Evaluation")
+    st.markdown("### 🎓 Frequently Asked Questions for Project Viva")
     
     with st.expander("1. What problem does this project solve?"):
         st.write("""
-        Recruitment teams typically receive hundreds of resumes per job posting. Manually reading each resume is time-consuming, prone to human fatigue, and inconsistent. This AI-powered platform automates technical screening by evaluating candidates on core required competencies and historical hiring metrics, providing consistent suitability scoring in seconds.
+        Recruitment teams receive hundreds of resumes per job posting. Manually reviewing each resume is slow, costly, and prone to fatigue and subjective bias. This AI-powered platform automates technical screening by evaluating candidates on core competencies and experience, producing reliable suitability scores in seconds.
         """)
 
     with st.expander("2. Why use Random Forest instead of a single Decision Tree?"):
         st.write("""
-        A single decision tree tends to overfit training data and exhibits high variance. Random Forest builds an ensemble of 100 decorrelated decision trees using bagging (bootstrap aggregation) and feature sub-sampling, averaging their predictions. This results in superior generalization, robustness to outliers, and high stability.
+        A single decision tree easily overfits and suffers from high variance. Random Forest builds 100 decorrelated decision trees using bagging and feature sub-sampling, then averages their predictions. This improves generalization and reduces prediction variance.
         """)
 
-    with st.expander("3. How are candidate features encoded?"):
+    with st.expander("3. How does the NLP parsing work?"):
         st.write("""
-        Technical skills (`python_m`, `django_m`, `sql_m`, `aws_o`) are binary flags (1 for proficient, 0 for absent). Relevant work experience (`rel_exp`) is an integer continuous variable. Categorical variables such as gender are binary-encoded to maintain numerical compatibility with scikit-learn estimators.
+        The resume parser extracts raw text from PDF/TXT uploads, standardizes case, and applies regular expressions and token matching to detect technical skills (Python, Django, SQL, AWS, React, etc.) and extract years of work experience.
         """)
 
-    with st.expander("4. What are the future enhancements for this project?"):
+    with st.expander("4. How are candidate features encoded?"):
         st.write("""
-        - Integration with Large Language Models (LLMs) like Gemini for semantic resume-to-job description matching.
-        - Direct PDF parsing for complex multi-column resumes.
-        - Automated candidate interview scheduling via email/calendar integration.
+        Skills are binary encoded (1 = present, 0 = absent). Experience is represented as a numerical integer. Categorical variables are converted into numerical flags to maintain compatibility with scikit-learn models.
         """)
